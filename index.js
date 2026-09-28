@@ -20,6 +20,8 @@ app.get("/", (req, res) => {
 const { verifyToken, requireRole } = require("./middleware/auth");
 app.use("/api/lawyers", require("./routes/lawyers"));
 app.use("/api/hires", verifyToken, requireRole("user", "lawyer"), require("./routes/hires"));
+
+app.use("/api/comments",verifyTokenOptional, require("./routes/comments"));
 // ...
 
 // 404

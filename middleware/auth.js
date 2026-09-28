@@ -4,17 +4,22 @@ const { createRemoteJWKSet, jwtVerify } = require("jose-cjs");
 const AUTH_BASE_URL = process.env.AUTH_BASE_URL || "http://localhost:3000";
 const JWKS = createRemoteJWKSet(new URL(`${AUTH_BASE_URL}/api/auth/jwks`));
 
+// ─────────────────────────────────────────────
+// verifyToken — token না থাকলে 401
+// ─────────────────────────────────────────────
 async function verifyToken(req, res, next) {
     try {
         const authHeader = req.headers.authorization;
         if (!authHeader || !authHeader.startsWith("Bearer ")) {
             return res.status(401).json({ success: false, error: "No token provided" });
         }
+
         const token = authHeader.split(" ")[1];
         const { payload } = await jwtVerify(token, JWKS, {
             issuer: AUTH_BASE_URL,
             audience: AUTH_BASE_URL,
         });
+
         req.user = {
             id: payload.id,
             email: payload.email,
@@ -26,6 +31,50 @@ async function verifyToken(req, res, next) {
     }
 }
 
+// ─────────────────────────────────────────────
+// verifyTokenOptional — token থাকলে verify, না থাকলে req.user = null
+// ─────────────────────────────────────────────
+async function verifyTokenOptional(req, res, next) {
+    const authHeader = req.headers.authorization;
+
+    // token নেই → guest
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+        req.user = null;
+        return next();
+    }
+
+    try {
+        const token = authHeader.split(" ")[1];
+        const { payload } = await jwtVerify(token, JWKS, {
+            issuer: AUTH_BASE_URL,
+            audience: AUTH_BASE_URL,
+        });
+
+        req.user = {
+            id: payload.id,
+            email: payload.email,
+            role: payload.role,
+        };
+        next();
+    } catch (err) {
+        // token আছে কিন্তু invalid → reject (silent guest বানাব না)
+        return res.status(401).json({ success: false, error: "Invalid or expired token" });
+    }
+}
+
+// ─────────────────────────────────────────────
+// requireAuth — req.user থাকা লাগবে
+// ─────────────────────────────────────────────
+function requireAuth(req, res, next) {
+    if (!req.user) {
+        return res.status(401).json({ success: false, error: "Authentication required" });
+    }
+    next();
+}
+
+// ─────────────────────────────────────────────
+// requireRole — specific role(s) match লাগবে
+// ─────────────────────────────────────────────
 function requireRole(...roles) {
     return (req, res, next) => {
         if (!req.user) {
@@ -38,4 +87,4 @@ function requireRole(...roles) {
     };
 }
 
-module.exports = { verifyToken, requireRole };
+module.exports = { verifyToken, verifyTokenOptional, requireAuth, requireRole };
