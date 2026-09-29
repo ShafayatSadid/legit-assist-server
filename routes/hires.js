@@ -134,6 +134,66 @@ router.get("/lawyer", async (req, res, next) => {
     }
 });
 
+
+// ─────────────────────────────────────────────
+// GET /api/hires/status/:lawyerProfileId
+// → logged-in user এর সাথে এই lawyer-এর বর্তমান অবস্থা
+// ─────────────────────────────────────────────
+router.get("/status/:lawyerProfileId", async (req, res, next) => {
+    try {
+        if (req.user.role !== "user") {
+            return res.json({
+                success: true,
+                data: { hire: null, hasCommented: false, commentId: null },
+            });
+        }
+
+        const { lawyerProfileId } = req.params;
+        if (!ObjectId.isValid(lawyerProfileId)) {
+            return res.status(400).json({ success: false, error: "Invalid lawyer id" });
+        }
+
+        const db = getDb();
+        const lid = new ObjectId(lawyerProfileId);
+
+        // সব hire এর মধ্যে latest একটাই দেখাব
+        const hires = await db
+            .collection("hires")
+            .find({ userId: req.user.id, lawyerProfileId: lid })
+            .sort({ createdAt: -1 })
+            .toArray();
+
+        // priority: paid > accepted > pending > rejected
+        const priority = { paid: 4, accepted: 3, pending: 2, rejected: 1 };
+        const hire = hires.sort(
+            (a, b) => (priority[b.status] || 0) - (priority[a.status] || 0)
+        )[0];
+
+        const comment = await db.collection("comments").findOne({
+            userId: req.user.id,
+            lawyerProfileId: lid,
+        });
+
+        res.json({
+            success: true,
+            data: {
+                hire: hire
+                    ? {
+                        id: hire._id.toString(),
+                        status: hire.status,
+                        fee: hire.fee,
+                        createdAt: hire.createdAt,
+                    }
+                    : null,
+                hasCommented: !!comment,
+                commentId: comment ? comment._id.toString() : null,
+            },
+        });
+    } catch (err) {
+        next(err);
+    }
+});
+
 // ─────────────────────────────────────────────
 // PATCH /api/hires/:id/accept
 // ─────────────────────────────────────────────
@@ -174,6 +234,75 @@ router.patch("/:id/accept", async (req, res, next) => {
         );
 
         res.json({ success: true, data: { status: "accepted" } });
+    } catch (err) {
+        next(err);
+    }
+});
+
+// ─────────────────────────────────────────────
+// PATCH /api/hires/:id/pay — user pays accepted hire (dummy)
+// (Stripe এলে এই route-এর ভিতরে session verify করে paid mark করব)
+// ─────────────────────────────────────────────
+router.patch("/:id/pay", async (req, res, next) => {
+    try {
+        if (req.user.role !== "user") {
+            return res.status(403).json({ success: false, error: "Only clients can pay" });
+        }
+
+        const { id } = req.params;
+        if (!ObjectId.isValid(id)) {
+            return res.status(400).json({ success: false, error: "Invalid hire id" });
+        }
+
+        const db = getDb();
+        const hire = await db.collection("hires").findOne({ _id: new ObjectId(id) });
+        if (!hire) {
+            return res.status(404).json({ success: false, error: "Hire not found" });
+        }
+        if (hire.userId !== req.user.id) {
+            return res.status(403).json({ success: false, error: "This hire does not belong to you" });
+        }
+        if (hire.status !== "accepted") {
+            return res.status(400).json({
+                success: false,
+                error: `Cannot pay a ${hire.status} hire. Only accepted hires can be paid.`,
+            });
+        }
+
+        const now = new Date();
+        const transactionId = `TXN-${Date.now()}-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
+
+        // hire update
+        await db.collection("hires").updateOne(
+            { _id: hire._id },
+            {
+                $set: {
+                    status: "paid",
+                    paidAt: now,
+                    updatedAt: now,
+                    transactionId,
+                },
+            }
+        );
+
+        // transaction record
+        await db.collection("transactions").insertOne({
+            transactionId,
+            hireId: hire._id,
+            userId: hire.userId,
+            userEmail: hire.userEmail,
+            lawyerId: hire.lawyerId,
+            lawyerProfileId: hire.lawyerProfileId,
+            lawyerName: hire.lawyerName,
+            amount: hire.fee,
+            status: "succeeded",
+            createdAt: now,
+        });
+
+        res.json({
+            success: true,
+            data: { status: "paid", transactionId, paidAt: now },
+        });
     } catch (err) {
         next(err);
     }

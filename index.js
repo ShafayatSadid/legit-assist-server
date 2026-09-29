@@ -16,13 +16,17 @@ app.get("/", (req, res) => {
     res.json({ success: true, data: "LegalEase API running" });
 });
 
-// ── Routes (pore mount korbo) ──
-const { verifyToken, requireRole } = require("./middleware/auth");
-app.use("/api/lawyers", require("./routes/lawyers"));
-app.use("/api/hires", verifyToken, requireRole("user", "lawyer"), require("./routes/hires"));
+// ── Routes ──
+const {
+    verifyToken,
+    verifyTokenOptional,
+} = require("./middleware/auth");
 
-app.use("/api/comments",verifyTokenOptional, require("./routes/comments"));
-// ...
+app.use("/api/lawyers", require("./routes/lawyers"));
+app.use("/api/lawyer", verifyToken, require("./routes/lawyer"));
+app.use("/api/hires", verifyToken, require("./routes/hires"));
+app.use("/api/comments", verifyTokenOptional, require("./routes/comments"));
+app.use("/api/user", verifyToken, require("./routes/user"));
 
 // 404
 app.use((req, res) => {
@@ -32,7 +36,10 @@ app.use((req, res) => {
 // Error handler — Express 5 auto-catches async errors
 app.use((err, req, res, next) => {
     console.error(err);
-    res.status(500).json({ success: false, error: err.message || "Internal server error" });
+    res.status(500).json({
+        success: false,
+        error: err.message || "Internal server error",
+    });
 });
 
 connectDb()

@@ -1,11 +1,38 @@
 // middleware/auth.js
 const { createRemoteJWKSet, jwtVerify } = require("jose-cjs");
+const { getDb } = require("../lib/db");
 
 const AUTH_BASE_URL = process.env.AUTH_BASE_URL || "http://localhost:3000";
 const JWKS = createRemoteJWKSet(new URL(`${AUTH_BASE_URL}/api/auth/jwks`));
 
 // ─────────────────────────────────────────────
-// verifyToken — token না থাকলে 401
+// DB থেকে fresh role আনি (JWT-র stale role ignore)
+// ─────────────────────────────────────────────
+async function resolveUser(payload) {
+    try {
+        const db = getDb();
+        const userDoc = await db.collection("user").findOne({ id: payload.id });
+
+        if (userDoc?.role) {
+            return {
+                id: userDoc.id,
+                email: userDoc.email,
+                role: userDoc.role,
+            };
+        }
+    } catch (err) {
+        console.error("resolveUser DB error:", err.message);
+    }
+
+    return {
+        id: payload.id,
+        email: payload.email,
+        role: payload.role || null,
+    };
+}
+
+// ─────────────────────────────────────────────
+// verifyToken
 // ─────────────────────────────────────────────
 async function verifyToken(req, res, next) {
     try {
@@ -20,11 +47,7 @@ async function verifyToken(req, res, next) {
             audience: AUTH_BASE_URL,
         });
 
-        req.user = {
-            id: payload.id,
-            email: payload.email,
-            role: payload.role,
-        };
+        req.user = await resolveUser(payload);
         next();
     } catch (err) {
         return res.status(401).json({ success: false, error: "Invalid or expired token" });
@@ -32,12 +55,11 @@ async function verifyToken(req, res, next) {
 }
 
 // ─────────────────────────────────────────────
-// verifyTokenOptional — token থাকলে verify, না থাকলে req.user = null
+// verifyTokenOptional
 // ─────────────────────────────────────────────
 async function verifyTokenOptional(req, res, next) {
     const authHeader = req.headers.authorization;
 
-    // token নেই → guest
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
         req.user = null;
         return next();
@@ -50,20 +72,15 @@ async function verifyTokenOptional(req, res, next) {
             audience: AUTH_BASE_URL,
         });
 
-        req.user = {
-            id: payload.id,
-            email: payload.email,
-            role: payload.role,
-        };
+        req.user = await resolveUser(payload);
         next();
     } catch (err) {
-        // token আছে কিন্তু invalid → reject (silent guest বানাব না)
         return res.status(401).json({ success: false, error: "Invalid or expired token" });
     }
 }
 
 // ─────────────────────────────────────────────
-// requireAuth — req.user থাকা লাগবে
+// requireAuth
 // ─────────────────────────────────────────────
 function requireAuth(req, res, next) {
     if (!req.user) {
@@ -73,7 +90,7 @@ function requireAuth(req, res, next) {
 }
 
 // ─────────────────────────────────────────────
-// requireRole — specific role(s) match লাগবে
+// requireRole
 // ─────────────────────────────────────────────
 function requireRole(...roles) {
     return (req, res, next) => {
