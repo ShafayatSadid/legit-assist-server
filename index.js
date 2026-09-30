@@ -20,6 +20,7 @@ app.get("/", (req, res) => {
 const {
     verifyToken,
     verifyTokenOptional,
+    requireRole,
 } = require("./middleware/auth");
 
 app.use("/api/lawyers", require("./routes/lawyers"));
@@ -27,6 +28,7 @@ app.use("/api/lawyer", verifyToken, require("./routes/lawyer"));
 app.use("/api/hires", verifyToken, require("./routes/hires"));
 app.use("/api/comments", verifyTokenOptional, require("./routes/comments"));
 app.use("/api/user", verifyToken, require("./routes/user"));
+app.use("/api/admin", verifyToken, requireRole("admin"), require("./routes/admin"));
 
 // 404
 app.use((req, res) => {
