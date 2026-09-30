@@ -50,7 +50,7 @@ router.get("/users", async (req, res, next) => {
 });
 
 // ─────────────────────────────────────────────
-// PATCH /api/admin/users/:id/role — role change (user ↔ lawyer)
+// PATCH /api/admin/users/:id/role — role change
 // ─────────────────────────────────────────────
 router.patch("/users/:id/role", async (req, res, next) => {
     try {
@@ -67,18 +67,23 @@ router.patch("/users/:id/role", async (req, res, next) => {
         const { id } = req.params;
         const db = getDb();
 
-        // _id দিয়ে try, না হলে id
         let result = { matchedCount: 0 };
         const oid = toObjectId(id);
         if (oid) {
             result = await db
                 .collection("user")
-                .updateOne({ _id: oid }, { $set: { role, updatedAt: new Date() } });
+                .updateOne(
+                    { _id: oid },
+                    { $set: { role, updatedAt: new Date() } }
+                );
         }
         if (result.matchedCount === 0) {
             result = await db
                 .collection("user")
-                .updateOne({ id }, { $set: { role, updatedAt: new Date() } });
+                .updateOne(
+                    { id },
+                    { $set: { role, updatedAt: new Date() } }
+                );
         }
 
         if (result.matchedCount === 0) {
@@ -99,12 +104,12 @@ router.delete("/users/:id", async (req, res, next) => {
         const { id } = req.params;
         const db = getDb();
 
-        // নিজেকে delete করতে পারবে না
         if (id === req.user.id) {
-            return res.status(400).json({ success: false, error: "You cannot delete yourself" });
+            return res
+                .status(400)
+                .json({ success: false, error: "You cannot delete yourself" });
         }
 
-        // user খুঁজি
         const oid = toObjectId(id);
         let user = null;
         if (oid) user = await db.collection("user").findOne({ _id: oid });
@@ -116,10 +121,7 @@ router.delete("/users/:id", async (req, res, next) => {
 
         const userId = user.id || user._id.toString();
 
-        // user remove
         await db.collection("user").deleteOne({ _id: user._id });
-
-        // তার lawyer profile থাকলে remove
         await db.collection("lawyerProfiles").deleteMany({ userId });
 
         res.json({ success: true, data: { id: userId } });
@@ -201,7 +203,9 @@ router.delete("/lawyers/:id", async (req, res, next) => {
         }
 
         const db = getDb();
-        const result = await db.collection("lawyerProfiles").deleteOne({ _id: oid });
+        const result = await db
+            .collection("lawyerProfiles")
+            .deleteOne({ _id: oid });
         if (result.deletedCount === 0) {
             return res.status(404).json({ success: false, error: "Lawyer not found" });
         }
@@ -226,6 +230,7 @@ router.get("/transactions", async (req, res, next) => {
 
         const data = docs.map((t) => ({
             id: t._id.toString(),
+            type: t.type || "hire",              // ← পুরনো record fallback
             transactionId: t.transactionId,
             userEmail: t.userEmail,
             lawyerName: t.lawyerName,
@@ -241,24 +246,25 @@ router.get("/transactions", async (req, res, next) => {
 });
 
 // ─────────────────────────────────────────────
-// GET /api/admin/analytics — 4 counts + revenue
+// GET /api/admin/analytics — total + revenue (hire + publish fee)
 // ─────────────────────────────────────────────
 router.get("/analytics", async (req, res, next) => {
     try {
         const db = getDb();
 
-        const [totalUsers, totalLawyers, totalHires, revenueAgg] = await Promise.all([
-            db.collection("user").countDocuments({ role: "user" }),
-            db.collection("user").countDocuments({ role: "lawyer" }),
-            db.collection("hires").countDocuments({}),
-            db
-                .collection("transactions")
-                .aggregate([
-                    { $match: { status: "succeeded" } },
-                    { $group: { _id: null, total: { $sum: "$amount" } } },
-                ])
-                .toArray(),
-        ]);
+        const [totalUsers, totalLawyers, totalHires, revenueAgg] =
+            await Promise.all([
+                db.collection("user").countDocuments({ role: "user" }),
+                db.collection("user").countDocuments({ role: "lawyer" }),
+                db.collection("hires").countDocuments({}),
+                db
+                    .collection("transactions")
+                    .aggregate([
+                        { $match: { status: "succeeded" } },
+                        { $group: { _id: null, total: { $sum: "$amount" } } },
+                    ])
+                    .toArray(),
+            ]);
 
         const totalRevenue = revenueAgg[0]?.total || 0;
 
