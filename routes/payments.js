@@ -2,16 +2,29 @@
 const express = require("express");
 const { ObjectId } = require("mongodb");
 const Stripe = require("stripe");
+require("dotenv").config();               // ← fix: env load এখানেই
 const { getDb } = require("../lib/db");
 
 const router = express.Router();
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+
+// lazy init — env miss হলে crash নয়, meaningful error
+if (!process.env.STRIPE_SECRET_KEY) {
+    console.error("⚠️  STRIPE_SECRET_KEY missing in .env — payments will fail");
+}
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || "");
 
 // ─────────────────────────────────────────────
 // POST /api/payments/checkout — Stripe Checkout Session create
 // ─────────────────────────────────────────────
 router.post("/checkout", async (req, res, next) => {
     try {
+        if (!process.env.STRIPE_SECRET_KEY) {
+            return res.status(500).json({
+                success: false,
+                error: "Stripe is not configured. Add STRIPE_SECRET_KEY to .env",
+            });
+        }
+
         if (req.user.role !== "user") {
             return res.status(403).json({ success: false, error: "Only clients can pay" });
         }
@@ -38,8 +51,8 @@ router.post("/checkout", async (req, res, next) => {
 
         const FRONTEND_URL = process.env.FRONTEND_URL || "http://localhost:3000";
 
-        // fee (BDT) → USD cents (fake 100:1). Min $1.
-        const usdCents = Math.max(100, Math.round((hire.fee / 100) * 100));
+        // BDT → USD cents (fake 100:1 for demo). Min $1.
+        const usdCents = Math.max(100, Math.round(hire.fee));
 
         const session = await stripe.checkout.sessions.create({
             mode: "payment",
@@ -75,10 +88,17 @@ router.post("/checkout", async (req, res, next) => {
 });
 
 // ─────────────────────────────────────────────
-// GET /api/payments/verify?session_id=... — success redirect verify
+// GET /api/payments/verify?session_id=...
 // ─────────────────────────────────────────────
 router.get("/verify", async (req, res, next) => {
     try {
+        if (!process.env.STRIPE_SECRET_KEY) {
+            return res.status(500).json({
+                success: false,
+                error: "Stripe is not configured.",
+            });
+        }
+
         const { session_id } = req.query;
         if (!session_id) {
             return res.status(400).json({ success: false, error: "session_id required" });
@@ -133,10 +153,10 @@ router.get("/verify", async (req, res, next) => {
             lawyerId: hire.lawyerId,
             lawyerProfileId: hire.lawyerProfileId,
             lawyerName: hire.lawyerName,
-            amount: hire.fee,          // BDT — display
+            amount: hire.fee,
             currency: "BDT",
             stripeSessionId: session_id,
-            stripeAmount: session.amount_total,   // USD cents
+            stripeAmount: session.amount_total,
             stripeCurrency: session.currency,
             status: "succeeded",
             createdAt: now,
