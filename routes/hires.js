@@ -58,7 +58,14 @@ router.post("/", async (req, res, next) => {
         }
 
         // ── user এর name আনি (better-auth user collection) ──
-        const userDoc = await db.collection("user").findOne({ id: req.user.id });
+        // _id তে try, না হলে id তে
+        let userDoc = null;
+        if (ObjectId.isValid(req.user.id)) {
+            userDoc = await db.collection("user").findOne({ _id: new ObjectId(req.user.id) });
+        }
+        if (!userDoc) {
+            userDoc = await db.collection("user").findOne({ id: req.user.id });
+        }
 
         const now = new Date();
         const doc = {

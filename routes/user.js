@@ -1,17 +1,29 @@
 // routes/user.js
 const express = require("express");
+const { ObjectId } = require("mongodb");
 const { getDb } = require("../lib/db");
-const { requireAuth, requireRole } = require("../middleware/auth");
+const { requireAuth } = require("../middleware/auth");
 
 const router = express.Router();
 
+// helper — id দিয়ে user খোঁজা (native driver + better-auth compat)
+async function findUserById(db, idStr) {
+    if (ObjectId.isValid(idStr)) {
+        const byId = await db
+            .collection("user")
+            .findOne({ _id: new ObjectId(idStr) });
+        if (byId) return byId;
+    }
+    return db.collection("user").findOne({ id: idStr });
+}
+
 // ─────────────────────────────────────────────
-// GET /api/user/me — current user info
+// GET /api/user/me
 // ─────────────────────────────────────────────
 router.get("/me", requireAuth, async (req, res, next) => {
     try {
         const db = getDb();
-        const user = await db.collection("user").findOne({ id: req.user.id });
+        const user = await findUserById(db, req.user.id);
         if (!user) {
             return res.status(404).json({ success: false, error: "User not found" });
         }
@@ -19,7 +31,7 @@ router.get("/me", requireAuth, async (req, res, next) => {
         res.json({
             success: true,
             data: {
-                id: user.id,
+                id: user.id || user._id.toString(),
                 name: user.name,
                 email: user.email,
                 image: user.image,
@@ -33,7 +45,7 @@ router.get("/me", requireAuth, async (req, res, next) => {
 });
 
 // ─────────────────────────────────────────────
-// PATCH /api/user/profile — update own name + image
+// PATCH /api/user/profile
 // ─────────────────────────────────────────────
 router.patch("/profile", requireAuth, async (req, res, next) => {
     try {
@@ -65,10 +77,19 @@ router.patch("/profile", requireAuth, async (req, res, next) => {
         updates.updatedAt = new Date();
 
         const db = getDb();
-        const result = await db.collection("user").updateOne(
-            { id: req.user.id },
-            { $set: updates }
-        );
+
+        // _id দিয়ে try করি, না হলে id
+        let result = { matchedCount: 0 };
+        if (ObjectId.isValid(req.user.id)) {
+            result = await db
+                .collection("user")
+                .updateOne({ _id: new ObjectId(req.user.id) }, { $set: updates });
+        }
+        if (result.matchedCount === 0) {
+            result = await db
+                .collection("user")
+                .updateOne({ id: req.user.id }, { $set: updates });
+        }
 
         if (result.matchedCount === 0) {
             return res.status(404).json({ success: false, error: "User not found" });

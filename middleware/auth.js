@@ -1,29 +1,46 @@
 // middleware/auth.js
 const { createRemoteJWKSet, jwtVerify } = require("jose-cjs");
+const { ObjectId } = require("mongodb");
 const { getDb } = require("../lib/db");
 
 const AUTH_BASE_URL = process.env.AUTH_BASE_URL || "http://localhost:3000";
 const JWKS = createRemoteJWKSet(new URL(`${AUTH_BASE_URL}/api/auth/jwks`));
 
 // ─────────────────────────────────────────────
-// DB থেকে fresh role আনি (JWT-র stale role ignore)
+// DB থেকে fresh user (role সহ) — _id + id দুইটাই try
 // ─────────────────────────────────────────────
 async function resolveUser(payload) {
     try {
         const db = getDb();
-        const userDoc = await db.collection("user").findOne({ id: payload.id });
 
-        if (userDoc?.role) {
+        let userDoc = null;
+
+        // _id দিয়ে try (better-auth এখানে save করে)
+        if (ObjectId.isValid(payload.id)) {
+            userDoc = await db
+                .collection("user")
+                .findOne({ _id: new ObjectId(payload.id) });
+        }
+
+        // না পেলে id field দিয়ে try
+        if (!userDoc) {
+            userDoc = await db
+                .collection("user")
+                .findOne({ id: payload.id });
+        }
+
+        if (userDoc) {
             return {
-                id: userDoc.id,
+                id: userDoc.id || userDoc._id.toString(),
                 email: userDoc.email,
-                role: userDoc.role,
+                role: userDoc.role || null,
             };
         }
     } catch (err) {
         console.error("resolveUser DB error:", err.message);
     }
 
+    // DB fail → JWT fallback
     return {
         id: payload.id,
         email: payload.email,
