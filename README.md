@@ -8,7 +8,7 @@
 
 > REST API backend for **LegalEase** — Express 5 + MongoDB (native driver) + Better Auth JWT + Stripe.
 
-**Live API:** https://legal-ease-server.onrender.com _(replace with your deployed URL)_
+**Live API:** https://legit-assist-server.vercel.app
 
 ---
 
