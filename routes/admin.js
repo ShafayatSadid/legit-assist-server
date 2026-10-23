@@ -248,29 +248,71 @@ router.get("/transactions", async (req, res, next) => {
 // ─────────────────────────────────────────────
 // GET /api/admin/analytics — total + revenue (hire + publish fee)
 // ─────────────────────────────────────────────
+// GET /api/admin/analytics
 router.get("/analytics", async (req, res, next) => {
     try {
         const db = getDb();
 
-        const [totalUsers, totalLawyers, totalHires, revenueAgg] =
-            await Promise.all([
-                db.collection("user").countDocuments({ role: "user" }),
-                db.collection("user").countDocuments({ role: "lawyer" }),
-                db.collection("hires").countDocuments({}),
-                db
-                    .collection("transactions")
-                    .aggregate([
-                        { $match: { status: "succeeded" } },
-                        { $group: { _id: null, total: { $sum: "$amount" } } },
-                    ])
-                    .toArray(),
-            ]);
+        // 1. Stat Cards Data
+        const [totalUsers, totalLawyers, totalHires, revenueAgg] = await Promise.all([
+            db.collection("user").countDocuments({ role: "user" }),
+            db.collection("user").countDocuments({ role: "lawyer" }),
+            db.collection("hires").countDocuments({}),
+            db.collection("transactions")
+                .aggregate([
+                    { $match: { status: "succeeded" } },
+                    { $group: { _id: null, total: { $sum: "$amount" } } },
+                ])
+                .toArray(),
+        ]);
 
         const totalRevenue = revenueAgg[0]?.total || 0;
 
+        // 2. Line Chart Data (Hires over last 6 months)
+        // Note: simplified logic for demonstration. In production, handle month gaps.
+        const hiresByMonth = await db.collection("hires").aggregate([
+            {
+                $group: {
+                    _id: { $month: "$createdAt" },
+                    hires: { $sum: 1 }
+                }
+            },
+            { $sort: { _id: 1 } }
+        ]).toArray();
+
+        const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+        const lineChartData = hiresByMonth.map(item => ({
+            name: monthNames[item._id - 1],
+            hires: item.hires
+        }));
+
+        // 3. Pie Chart Data (Hires by Specialization)
+        const hiresBySpec = await db.collection("hires").aggregate([
+            {
+                $group: {
+                    _id: "$lawyerSpecialization",
+                    value: { $sum: 1 }
+                }
+            },
+            { $sort: { value: -1 } },
+            { $limit: 5 } // Top 5 specializations
+        ]).toArray();
+
+        const pieChartData = hiresBySpec.map(item => ({
+            name: item._id || "Other",
+            value: item.value
+        }));
+
         res.json({
             success: true,
-            data: { totalUsers, totalLawyers, totalHires, totalRevenue },
+            data: {
+                totalUsers,
+                totalLawyers,
+                totalHires,
+                totalRevenue,
+                lineChartData,
+                pieChartData
+            },
         });
     } catch (err) {
         next(err);

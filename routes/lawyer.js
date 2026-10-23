@@ -26,6 +26,7 @@ function serialize(doc) {
         specialization: doc.specialization,
         fee: doc.fee,
         image: doc.image,
+        gallery: doc.gallery || [],
         published: !!doc.published,
         isBusy: !!doc.isBusy,
         hireCount: doc.hireCount || 0,
@@ -68,6 +69,15 @@ function validateProfileInput(body, { partial = false } = {}) {
         else out.image = body.image || null;
     }
 
+    // ✅ Gallery Validation
+    if (body.gallery !== undefined) {
+        if (!Array.isArray(body.gallery)) {
+            errors.push("Gallery must be an array of image URLs");
+        } else {
+            out.gallery = body.gallery;
+        }
+    }
+
     return { errors, out };
 }
 
@@ -99,6 +109,7 @@ router.post("/profile", requireAuth, requireRole("lawyer"), async (req, res, nex
             specialization: out.specialization,
             fee: out.fee,
             image: out.image || userDoc?.image || null,
+            gallery: out.gallery || [], // ✅ Save gallery
             published: false,
             isBusy: false,
             hireCount: 0,
@@ -150,7 +161,6 @@ router.patch("/profile", requireAuth, requireRole("lawyer"), async (req, res, ne
             return res.status(400).json({ success: false, error: "Nothing to update" });
         }
 
-        // isBusy optional bool
         if (req.body.isBusy !== undefined) {
             out.isBusy = !!req.body.isBusy;
         }
@@ -176,7 +186,6 @@ router.delete("/profile", requireAuth, requireRole("lawyer"), async (req, res, n
             return res.status(404).json({ success: false, error: "Profile not found" });
         }
 
-        // active hire থাকলে delete block
         const activeHire = await db.collection("hires").findOne({
             lawyerId: req.user.id,
             status: { $in: ["pending", "accepted"] },
@@ -197,7 +206,6 @@ router.delete("/profile", requireAuth, requireRole("lawyer"), async (req, res, n
 
 // ─────────────────────────────────────────────
 // POST /api/lawyer/profile/pay-fee — dummy publish fee
-// (Stripe pore — আপাতত সরাসরি paid mark করবে)
 // ─────────────────────────────────────────────
 router.post("/profile/pay-fee", requireAuth, requireRole("lawyer"), async (req, res, next) => {
     try {

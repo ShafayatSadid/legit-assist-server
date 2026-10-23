@@ -1,6 +1,6 @@
-# LegalEase — Server
+# LegitAssist — Server
 
-> REST API backend for **LegalEase** — Express 5 + MongoDB (native driver) + Better Auth JWT + Stripe.
+> REST API backend for **LegitAssist** — Express 5 + MongoDB (native driver) + Better Auth JWT + Stripe.
 
 **Live API:** https://legit-assist-server.vercel.app
 
@@ -8,34 +8,34 @@
 
 ## 📌 Purpose
 
-Backend for the LegalEase lawyer hiring platform. Handles authentication (JWT verification), lawyer listings, hire requests, comments, payments (Stripe Checkout), transactions, and admin operations.
+Backend for the LegitAssist lawyer hiring platform. Handles authentication (JWT verification), lawyer listings (with image galleries), hire requests, comments, Stripe payments, transactions, contact form storage, public analytics, and admin operations.
 
 ---
 
 ## ✨ Features
 
-- JWT verification (Better Auth JWKS)
-- Role-based access (`user`, `lawyer`, `admin`)
-- Lawyer profile CRUD + publish/unpublish
-- Hire request workflow (pending → accepted → paid / rejected)
-- Comment system (only hired clients can review)
-- Stripe Checkout for hire payments and lawyer publishing fee
-- Transaction records with revenue analytics
-- Admin endpoints: users, lawyers, transactions, analytics
-- Search / filter / sort / pagination for lawyers
-- Cloudinary image upload (unsigned preset from client)
+- **Authentication:** JWT verification (Better Auth JWKS).
+- **Role-Based Access:** Middleware for `user`, `lawyer`, and `admin`.
+- **Lawyer Profiles:** CRUD operations, Multiple Image Gallery support, Publish/Unpublish toggle.
+- **Hire System:** Complete workflow (pending → accepted → paid / rejected).
+- **Comment System:** Verified reviews (only clients who have successfully hired can review).
+- **Payments:** Stripe Checkout for Hire Payments and Lawyer Publishing Fees.
+- **Analytics:** Dynamic aggregation for Users, Lawyers, Hires, Revenue, and Chart data (Monthly hires, Hires by specialization).
+- **Public Data:** Endpoints for Home page statistics and latest testimonials.
+- **Contact Form:** API endpoint to securely save user messages to the database.
+- **Cloudinary Integration:** Handles image URLs uploaded from the client.
 
 ---
 
 ## 🛠 Tech Stack
 
-- Node.js (CommonJS)
-- Express 5
-- MongoDB Atlas (native driver)
-- Better Auth (JWT plugin)
-- jose-cjs (JWT verification)
-- Stripe (test mode)
-- Deployment: Vercel / Render / Railway
+- **Runtime:** Node.js (CommonJS)
+- **Framework:** Express 5
+- **Database:** MongoDB Atlas (Native Driver)
+- **Auth:** Better Auth (JWT Plugin)
+- **JWT Verify:** jose-cjs
+- **Payments:** Stripe (Test mode)
+- **Deployment:** Vercel / Render / Railway
 
 ---
 
@@ -52,10 +52,9 @@ Backend for the LegalEase lawyer hiring platform. Handles authentication (JWT ve
 
 ---
 
-## ⚙️ Setup
+## ⚙️ Setup (Local Development)
 
 ### 1. Clone & install
-
 ```bash
 git clone <server-repo-url>
 cd legit-assist-server
@@ -63,7 +62,6 @@ npm install
 ```
 
 ### 2. Environment variables
-
 Create a `.env` file in the project root:
 
 ```env
@@ -75,18 +73,15 @@ STRIPE_SECRET_KEY=sk_test_xxxxxxxxxxxxxxxx
 ```
 
 ### 3. Run
-
 ```bash
 node index.js
 ```
-
 Server runs on **http://localhost:5000**
 
 **Health check:**
-
-```
+```text
 GET http://localhost:5000/
-→ { success: true, data: "LegalEase API running" }
+→ { success: true, data: "LegitAssist API running" }
 ```
 
 ---
@@ -94,44 +89,43 @@ GET http://localhost:5000/
 ## 🔌 API Endpoints
 
 ### Public
-
 | Method | Route | Purpose |
 |--------|-------|---------|
-| GET | `/api/lawyers` | Browse lawyers (search, filter, sort, pagination) |
+| GET | `/api/lawyers` | Browse lawyers (search, filter, sort, pagination, excludeId) |
 | GET | `/api/lawyers/featured` | Latest 6 published |
 | GET | `/api/lawyers/top` | Top 3 most-hired |
 | GET | `/api/lawyers/categories` | Static categories |
-| GET | `/api/lawyers/:id` | Single lawyer |
-| GET | `/api/comments/lawyer/:id` | Comments for a lawyer |
+| GET | `/api/lawyers/:id` | Single lawyer profile |
+| GET | `/api/comments/lawyer/:id` | Public comments for a lawyer |
+| GET | `/api/public/stats` | Platform stats for Home page |
+| GET | `/api/public/testimonials` | Latest 3 reviews for Home page |
+| POST | `/api/contact` | Submit contact form message |
 
-### Client (role: user)
-
+### Client / User (role: user)
 | Method | Route | Purpose |
 |--------|-------|---------|
 | POST | `/api/hires` | Create hire request |
 | GET | `/api/hires/my` | Own hiring history |
-| GET | `/api/hires/status/:lawyerProfileId` | Hire + comment status |
-| POST | `/api/comments` | Post comment (hire required) |
+| GET | `/api/hires/status/:lawyerProfileId` | Get specific hire + comment status |
+| POST | `/api/comments` | Post comment (requires successful hire) |
 | GET | `/api/comments/my` | Own comments |
 | PATCH | `/api/comments/:id` | Edit comment |
 | DELETE | `/api/comments/:id` | Delete comment |
 | PATCH | `/api/user/profile` | Update name + image |
 
 ### Lawyer (role: lawyer)
-
 | Method | Route | Purpose |
 |--------|-------|---------|
 | POST | `/api/lawyer/profile` | Create profile |
 | GET | `/api/lawyer/profile` | Own profile |
-| PATCH | `/api/lawyer/profile` | Update |
-| DELETE | `/api/lawyer/profile` | Delete |
-| PATCH | `/api/lawyer/profile/toggle-publish` | Publish / unpublish |
-| GET | `/api/hires/lawyer` | Incoming requests |
-| PATCH | `/api/hires/:id/accept` | Accept |
-| PATCH | `/api/hires/:id/reject` | Reject |
+| PATCH | `/api/lawyer/profile` | Update profile (including gallery) |
+| DELETE | `/api/lawyer/profile` | Delete profile |
+| PATCH | `/api/lawyer/profile/toggle-publish` | Publish / Unpublish |
+| GET | `/api/hires/lawyer` | Incoming hire requests |
+| PATCH | `/api/hires/:id/accept` | Accept request |
+| PATCH | `/api/hires/:id/reject` | Reject request |
 
-### Payments
-
+### Payments (Protected)
 | Method | Route | Purpose |
 |--------|-------|---------|
 | POST | `/api/payments/checkout` | Stripe session — hire payment |
@@ -140,21 +134,19 @@ GET http://localhost:5000/
 | GET | `/api/payments/lawyer-fee-verify` | Verify publishing fee |
 
 ### Admin (role: admin)
-
 | Method | Route | Purpose |
 |--------|-------|---------|
-| GET | `/api/admin/users` | List users |
+| GET | `/api/admin/users` | List all users |
 | PATCH | `/api/admin/users/:id/role` | Change role |
 | DELETE | `/api/admin/users/:id` | Delete user + profile |
-| GET | `/api/admin/lawyers` | List all listings |
+| GET | `/api/admin/lawyers` | List all lawyer listings |
 | PATCH | `/api/admin/lawyers/:id/toggle-publish` | Toggle publish |
 | DELETE | `/api/admin/lawyers/:id` | Delete listing |
 | GET | `/api/admin/transactions` | All transactions |
-| GET | `/api/admin/analytics` | Total counts + revenue |
+| GET | `/api/admin/analytics` | Total counts, revenue + Chart data |
 
 **Auth header:**
-
-```
+```text
 Authorization: Bearer <jwt-token>
 ```
 
@@ -164,13 +156,14 @@ Authorization: Bearer <jwt-token>
 
 | Collection | Purpose |
 |------------|---------|
-| `user` | Better Auth–managed users (with `role`) |
-| `lawyerProfiles` | Lawyer listings |
-| `hires` | Hire requests + status |
-| `comments` | Reviews on lawyers |
+| `user` | Better Auth–managed users (with role) |
+| `lawyerProfiles` | Lawyer listings (including gallery array) |
+| `hires` | Hire requests + statuses |
+| `comments` | Verified reviews on lawyers |
 | `transactions` | Hire payments + publishing fees |
+| `contactMessages` | User messages from the contact form |
 
-Indexes are created automatically in `lib/db.js` on first connect.
+*Indexes are created automatically in `lib/db.js` on first connect.*
 
 ---
 
@@ -178,16 +171,15 @@ Indexes are created automatically in `lib/db.js` on first connect.
 
 **Vercel / Render / Railway:**
 
-1. Push to GitHub
-2. Create new Web Service → connect repo
+1. Push to GitHub.
+2. Create new Web Service → connect repo.
 3. Build command: `npm install`
 4. Start command: `node index.js`
-5. Add all env vars (see `.env` section above)
-6. Deploy → copy live URL
-7. Update client's `NEXT_PUBLIC_API_URL` with the deployed URL
+5. Add all env vars (see `.env` section above).
+6. Deploy → copy live URL.
+7. Update client's `NEXT_PUBLIC_API_URL` with the deployed URL.
 
-**⚠️ CORS:** Currently allows all origins (`cors()`). For production, restrict:
-
+**⚠️ CORS:** For production, restrict origins:
 ```js
 app.use(cors({ origin: process.env.FRONTEND_URL, credentials: true }));
 ```
@@ -196,7 +188,7 @@ app.use(cors({ origin: process.env.FRONTEND_URL, credentials: true }));
 
 ## 📁 Project Structure
 
-```
+```text
 index.js                 Express app + route mounting
 lib/
 └── db.js                MongoClient singleton + indexes
@@ -209,8 +201,10 @@ routes/
 ├── comments.js
 ├── user.js
 ├── admin.js
-└── payments.js
-seed.js                  Dummy lawyer data
+├── payments.js
+├── public.js            Home stats & testimonials
+└── contact.js           Contact form storage
+seed.js                  Dummy lawyer data generator
 ```
 
 ---
@@ -220,11 +214,9 @@ seed.js                  Dummy lawyer data
 ```bash
 node seed.js
 ```
-
-Inserts 4 dummy lawyers for testing.
+*Inserts 24 dummy lawyers (including gallery images) for testing purposes.*
 
 ---
 
 ## 📄 License
-
 MIT

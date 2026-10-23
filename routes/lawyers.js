@@ -73,6 +73,10 @@ router.get("/", async (req, res, next) => {
             filter.specialization = specialization;
         }
 
+        if (req.query.excludeId && ObjectId.isValid(req.query.excludeId)) {
+            filter._id = { $ne: new ObjectId(req.query.excludeId) };
+        }
+
         // ── fee range ──
         const min = parseNumber(minFee);
         const max = parseNumber(maxFee);

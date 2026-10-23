@@ -24,6 +24,8 @@ const {
 } = require("./middleware/auth");
 
 app.use("/api/lawyers", require("./routes/lawyers"));
+app.use("/api/public", require("./routes/public"));
+app.use("/api/contact", require("./routes/contact"));
 app.use("/api/lawyer", verifyToken, require("./routes/lawyer"));
 app.use("/api/hires", verifyToken, require("./routes/hires"));
 app.use("/api/comments", verifyTokenOptional, require("./routes/comments"));
